@@ -1,0 +1,22 @@
+# Scrape every backend pod (blue AND green) directly, so both colours are
+# visible during a blue-green switch. The `color` pod label becomes a metric label.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: devsecops360-backend
+  labels: { release: monitoring }
+spec:
+  namespaceSelector:
+    matchNames: [devsecops360-dev, devsecops360-staging, devsecops360-prod]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_devsecops360_color]
+          targetLabel: deploy_color
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace

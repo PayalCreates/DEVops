@@ -1,0 +1,90 @@
+# Infrastructure-as-Code validation: Terraform, Kubernetes manifests, Ansible.
+name: IaC
+
+on:
+  pull_request:
+    paths: ["terraform/**", "kubernetes/**", "ansible/**", "observability/**", ".github/workflows/iac.yml"]
+  push:
+    branches: [main]
+    paths: ["terraform/**", "kubernetes/**", "ansible/**", "observability/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [terraform/environments/local, terraform/environments/staging, terraform/environments/production]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.3
+      - run: terraform fmt -check -recursive terraform
+      - name: init (no backend) + validate
+        working-directory: ${{ matrix.dir }}
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+      - uses: terraform-linters/setup-tflint@v4
+      - name: tflint
+        working-directory: ${{ matrix.dir }}
+        run: tflint --init && tflint --recursive --chdir ../..
+
+  kubernetes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kustomize + kubeconform
+        run: |
+          curl -sSL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.5.0/kustomize_v5.5.0_linux_amd64.tar.gz | tar xz
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+      - name: Render and validate every overlay against Kubernetes 1.31 schemas
+        run: |
+          for o in development staging production; do
+            echo "::group::$o"
+            ./kustomize build kubernetes/overlays/$o > /tmp/$o.yaml
+            ./kubeconform -strict -summary -kubernetes-version 1.31.0 \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              /tmp/$o.yaml
+            echo "::endgroup::"
+          done
+      - name: Render monitoring objects
+        run: ./kustomize build observability/kubernetes/app-monitoring > /dev/null
+      - name: Policy checks (repo script)
+        run: python3 scripts/validate/k8s_policy_check.py /tmp/development.yaml /tmp/staging.yaml /tmp/production.yaml
+
+  ansible:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ansible
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ansible-core==2.17.7 ansible-lint==24.12.2
+      - run: ansible-galaxy collection install -r requirements.yml -p ./collections
+      - run: ansible-playbook --syntax-check playbooks/*.yml
+      - run: ansible-lint playbooks/ roles/
+
+  observability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: promtool check config + rules
+        run: |
+          docker run --rm -v "$PWD/observability/prometheus:/p" --entrypoint promtool prom/prometheus:v3.1.0 \
+            check rules /p/rules/slo-recording.yml /p/rules/alerts.yml
+          docker run --rm -v "$PWD/observability/prometheus:/etc/prometheus" --entrypoint promtool prom/prometheus:v3.1.0 \
+            check config /etc/prometheus/prometheus.yml
+      - name: Generated files are up to date
+        run: |
+          pip install pyyaml
+          python3 scripts/generate_observability.py
+          git diff --exit-code observability/

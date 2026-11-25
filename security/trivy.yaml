@@ -1,0 +1,16 @@
+# Trivy shared configuration (used by CI and scripts/security-scan.*)
+severity:
+  - HIGH
+  - CRITICAL
+scan:
+  scanners:
+    - vuln
+    - secret
+    - misconfig
+  skip-dirs:
+    - "**/node_modules"
+    - "apps/frontend/dist"
+    - "tests/e2e/node_modules"
+vulnerability:
+  ignore-unfixed: true   # only fail on CVEs that have a fix available
+ignorefile: security/.trivyignore.yaml

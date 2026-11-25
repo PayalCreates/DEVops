@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars (git-ignored) and adjust.
+cluster_name       = "devsecops360"
+kubernetes_version = "v1.31.4"
+worker_count       = 0
+
+# Turn on only when demonstrating (each costs RAM)
+enable_monitoring      = false
+enable_argocd          = false
+grafana_admin_password = "" # >= 12 chars when enable_monitoring = true

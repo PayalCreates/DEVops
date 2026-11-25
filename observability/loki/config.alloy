@@ -1,0 +1,56 @@
+// Grafana Alloy (successor to Promtail): ship Docker container logs to Loki.
+// Only containers of this Compose project are collected.
+
+discovery.docker "compose" {
+  host = "unix:///var/run/docker.sock"
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=devsecops360"]
+  }
+}
+
+discovery.relabel "compose" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "compose" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.compose.targets
+  relabel_rules = discovery.relabel.compose.rules
+  forward_to    = [loki.process.app.receiver]
+}
+
+// Backend logs are JSON: promote `level` to a label (low cardinality) and keep
+// request_id / route as structured metadata for filtering without label explosion.
+loki.process "app" {
+  stage.match {
+    selector = "{service=\"backend\"}"
+
+    stage.json {
+      expressions = { level = "level", request_id = "request_id", route = "route", status = "status" }
+    }
+    stage.labels {
+      values = { level = "" }
+    }
+    stage.structured_metadata {
+      values = { request_id = "", route = "", status = "" }
+    }
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

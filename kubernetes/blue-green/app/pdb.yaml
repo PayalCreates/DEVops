@@ -1,0 +1,9 @@
+# Voluntary disruptions (node drains, upgrades) never take the last pod down.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: backend }

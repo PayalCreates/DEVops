@@ -1,0 +1,4 @@
+app_deploy_rebuild: false
+app_deploy_environment: development
+app_deploy_seed_sample_data: true
+app_deploy_frontend_port: 8080

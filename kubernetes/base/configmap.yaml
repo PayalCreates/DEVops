@@ -1,0 +1,20 @@
+# Non-secret configuration. Secrets come from the `backend-secrets` Secret,
+# which is created by Terraform (terraform/modules/app-namespace) or by
+# deployment/scripts/create-secrets.{sh,ps1} — never committed to Git.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+data:
+  ENVIRONMENT: development
+  APP_VERSION: "1.0.0"
+  LOG_LEVEL: INFO
+  ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+  CORS_ORIGINS: http://devsecops360.localtest.me:8088
+  POSTGRES_DB: devsecops360
+  POSTGRES_USER: devsecops
+  POSTGRES_HOST: postgres
+  ADMIN_EMAIL: admin@devsecops360.dev
+  SEED_SAMPLE_DATA: "false"
+  RUN_MIGRATIONS: "false"   # migrations run once in the db-migrate Job, not in every pod
+  WEB_CONCURRENCY: "1"      # scale with replicas, not workers (keeps metrics per-pod)

@@ -1,0 +1,113 @@
+# PRODUCTION — HA replicas, stricter resources, docs disabled (ENVIRONMENT=production),
+# TLS at the ingress. Deploy only images that passed staging (same digest).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: devsecops360-prod
+
+labels:
+  - pairs: { devsecops360/environment: production }
+    includeSelectors: false
+
+resources:
+  - namespace.yaml
+  - ../../base
+  - ../../blue-green
+
+images:
+  - name: devsecops360-backend
+    newName: ghcr.io/your-github-username/devsecops360-backend
+    newTag: "1.0.0" # immutable release tag (from git tag v1.0.0); never :latest in prod
+  - name: devsecops360-frontend
+    newName: ghcr.io/your-github-username/devsecops360-frontend
+    newTag: "1.0.0" # immutable release tag (from git tag v1.0.0); never :latest in prod
+
+patches:
+  - target: { kind: ConfigMap, name: backend-config }
+    patch: |-
+      - op: replace
+        path: /data/ENVIRONMENT
+        value: production
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: WARNING
+      - op: replace
+        path: /data/ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - op: replace
+        path: /data/CORS_ORIGINS
+        value: https://devsecops360.example.com
+  - target: { kind: Ingress, name: devsecops360 }
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: devsecops360.example.com
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts: [devsecops360.example.com]
+            secretName: devsecops360-tls # issued by cert-manager (see docs/deployment)
+      - op: replace
+        path: /metadata/annotations/traefik.ingress.kubernetes.io~1router.middlewares
+        value: devsecops360-prod-security-headers@kubernetescrd,devsecops360-prod-rate-limit@kubernetescrd
+  - target: { kind: Deployment, name: backend-blue }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target: { kind: Deployment, name: frontend }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  - target: { kind: Deployment }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target: { kind: Deployment, name: "backend-.*" }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: 200m, memory: 192Mi }
+          limits: { cpu: "1", memory: 512Mi }
+  - target: { kind: HorizontalPodAutoscaler }
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 6
+  - target: { kind: PodDisruptionBudget }
+    patch: |-
+      - op: replace
+        path: /spec/maxUnavailable
+        value: 1
+  - target: { kind: CronJob, name: db-backup }
+    patch: |-
+      - op: replace
+        path: /spec/schedule
+        value: "0 * * * *" # hourly in production → RPO ≤ 1h
+  - target: { kind: PersistentVolumeClaim, name: db-backups }
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 10Gi
+  - target: { kind: ResourceQuota, name: namespace-quota }
+    patch: |-
+      - op: replace
+        path: /spec/hard/limits.memory
+        value: 8Gi
+      - op: replace
+        path: /spec/hard/limits.cpu
+        value: "10"
+      - op: replace
+        path: /spec/hard/requests.cpu
+        value: "4"
+      - op: replace
+        path: /spec/hard/requests.memory
+        value: 4Gi
+      - op: replace
+        path: /spec/hard/requests.storage
+        value: 20Gi

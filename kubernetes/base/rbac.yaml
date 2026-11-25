@@ -1,0 +1,72 @@
+# RBAC — namespace-scoped roles, no cluster-admin anywhere.
+#
+# deployer : what the blue-green pipeline needs (roll images, switch service
+#            selectors, run migration jobs) and nothing more — no Secret reads.
+# viewer   : read-only access for developers / auditors.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployer
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  # short-lived smoke-test pods + their script ConfigMap
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["smoke-check"]
+    verbs: ["get", "patch", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployer
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: viewer
+rules:
+  - apiGroups: ["", "apps", "batch", "autoscaling", "networking.k8s.io", "policy"]
+    resources: ["pods", "pods/log", "services", "endpoints", "configmaps", "deployments",
+                "replicasets", "statefulsets", "jobs", "cronjobs", "horizontalpodautoscalers",
+                "ingresses", "networkpolicies", "poddisruptionbudgets", "events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: viewer-developers
+subjects:
+  - kind: Group
+    name: devsecops360:developers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: viewer

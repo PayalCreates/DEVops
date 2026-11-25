@@ -1,0 +1,6 @@
+# Render .env from Vault secrets, build & start the Compose stack, wait until healthy.
+- name: Deploy DevSecOps360 with Docker Compose
+  hosts: app_servers
+  become: false
+  roles:
+    - role: app_deploy

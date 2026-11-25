@@ -1,0 +1,6 @@
+# Schedule automated PostgreSQL backups (cron) and run one immediately.
+- name: Configure database backups
+  hosts: app_servers
+  become: false
+  roles:
+    - role: backup

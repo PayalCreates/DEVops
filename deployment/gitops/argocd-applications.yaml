@@ -1,0 +1,77 @@
+# Argo CD Applications (optional GitOps). Install Argo CD with Terraform
+# (enable_argocd = true), set repoURL to your fork, then:
+#   kubectl apply -f deployment/gitops/argocd-applications.yaml
+#
+# Blue-green note: the deploy script owns the backend Service selectors and the
+# per-colour images/replicas at runtime, so Argo CD is told to ignore those fields
+# (otherwise it would "heal" a traffic switch back to Git's value).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: devsecops360
+  namespace: argocd
+spec:
+  description: DevSecOps360 environments
+  sourceRepos: ["https://github.com/your-github-username/devsecops360.git"]
+  destinations:
+    - { server: https://kubernetes.default.svc, namespace: "devsecops360-*" }
+  clusterResourceWhitelist:
+    - { group: "", kind: Namespace }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: devsecops360-staging
+  namespace: argocd
+spec:
+  project: devsecops360
+  source:
+    repoURL: https://github.com/your-github-username/devsecops360.git
+    targetRevision: main
+    path: kubernetes/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: devsecops360-staging
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ServerSideApply=true, RespectIgnoreDifferences=true]
+  ignoreDifferences:
+    - group: ""
+      kind: Service
+      name: backend
+      jsonPointers: [/spec/selector, /metadata/annotations]
+    - group: ""
+      kind: Service
+      name: backend-preview
+      jsonPointers: [/spec/selector]
+    - group: apps
+      kind: Deployment
+      name: backend-blue
+      jsonPointers: [/spec/replicas, /spec/template/spec/containers/0/image]
+    - group: apps
+      kind: Deployment
+      name: backend-green
+      jsonPointers: [/spec/replicas, /spec/template/spec/containers/0/image]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: devsecops360-production
+  namespace: argocd
+spec:
+  project: devsecops360
+  source:
+    repoURL: https://github.com/your-github-username/devsecops360.git
+    targetRevision: main
+    path: kubernetes/overlays/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: devsecops360-prod
+  syncPolicy:
+    # Production syncs are MANUAL: a human approves after staging soak.
+    syncOptions: [ServerSideApply=true, RespectIgnoreDifferences=true]
+  ignoreDifferences:
+    - { group: "", kind: Service, name: backend, jsonPointers: [/spec/selector, /metadata/annotations] }
+    - { group: "", kind: Service, name: backend-preview, jsonPointers: [/spec/selector] }
+    - { group: apps, kind: Deployment, name: backend-blue, jsonPointers: [/spec/replicas, /spec/template/spec/containers/0/image] }
+    - { group: apps, kind: Deployment, name: backend-green, jsonPointers: [/spec/replicas, /spec/template/spec/containers/0/image] }

@@ -1,0 +1,64 @@
+# STAGING — production-like: registry images, 2 replicas, production log level.
+# Image tags are updated by the delivery pipeline (GitOps commit) or by
+#   cd kubernetes/overlays/staging && kustomize edit set image devsecops360-backend=ghcr.io/OWNER/devsecops360-backend:<sha>
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: devsecops360-staging
+
+labels:
+  - pairs: { devsecops360/environment: staging }
+    includeSelectors: false
+
+resources:
+  - namespace.yaml
+  - ../../base
+  - ../../blue-green
+
+images:
+  - name: devsecops360-backend
+    newName: ghcr.io/your-github-username/devsecops360-backend
+    newTag: latest
+  - name: devsecops360-frontend
+    newName: ghcr.io/your-github-username/devsecops360-frontend
+    newTag: latest
+
+patches:
+  - target: { kind: ConfigMap, name: backend-config }
+    patch: |-
+      - op: replace
+        path: /data/ENVIRONMENT
+        value: staging
+      - op: replace
+        path: /data/CORS_ORIGINS
+        value: http://staging.devsecops360.localtest.me:8088
+  - target: { kind: Ingress, name: devsecops360 }
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: staging.devsecops360.localtest.me
+      - op: replace
+        path: /metadata/annotations/traefik.ingress.kubernetes.io~1router.middlewares
+        value: devsecops360-staging-security-headers@kubernetescrd,devsecops360-staging-rate-limit@kubernetescrd
+  - target: { kind: Deployment, name: backend-blue }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  - target: { kind: Deployment, name: frontend }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  - target: { kind: Deployment }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target: { kind: HorizontalPodAutoscaler }
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 4

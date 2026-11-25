@@ -1,0 +1,20 @@
+{
+  "users": [
+    {"email": "manager@devsecops360.dev", "full_name": "Maya Manager", "role": "manager"},
+    {"email": "alice@devsecops360.dev", "full_name": "Alice Developer", "role": "user"},
+    {"email": "bob@devsecops360.dev", "full_name": "Bob Tester", "role": "user"}
+  ],
+  "tasks": [
+    {"owner": "alice@devsecops360.dev", "title": "Implement JWT refresh flow", "description": "Design short-lived access tokens with rotation.", "status": "in_progress", "priority": "high", "due_in_days": 3},
+    {"owner": "alice@devsecops360.dev", "title": "Write Alembic migration for tags", "status": "todo", "priority": "medium", "due_in_days": 7},
+    {"owner": "alice@devsecops360.dev", "title": "Fix N+1 query on task list", "description": "Found during Locust bottleneck analysis.", "status": "done", "priority": "critical", "due_in_days": -2, "completed_days_ago": 1},
+    {"owner": "alice@devsecops360.dev", "title": "Add OpenAPI examples", "status": "done", "priority": "low", "due_in_days": -5, "completed_days_ago": 4},
+    {"owner": "alice@devsecops360.dev", "title": "Review Trivy findings", "description": "Triage HIGH/CRITICAL CVEs from nightly scan.", "status": "todo", "priority": "high", "due_in_days": -1},
+    {"owner": "bob@devsecops360.dev", "title": "Automate smoke tests post-deploy", "status": "in_progress", "priority": "high", "due_in_days": 2},
+    {"owner": "bob@devsecops360.dev", "title": "Locust baseline: 50 users", "description": "Record p95 latency and error rate.", "status": "done", "priority": "medium", "due_in_days": -3, "completed_days_ago": 2},
+    {"owner": "bob@devsecops360.dev", "title": "Verify nightly backup restore", "status": "todo", "priority": "critical", "due_in_days": 1},
+    {"owner": "bob@devsecops360.dev", "title": "Document chaos experiment results", "status": "todo", "priority": "low", "due_in_days": 14},
+    {"owner": "manager@devsecops360.dev", "title": "Approve Q4 SLO targets", "description": "Availability 99.5%, p95 < 300ms.", "status": "done", "priority": "high", "due_in_days": -6, "completed_days_ago": 6},
+    {"owner": "manager@devsecops360.dev", "title": "Run incident response tabletop", "status": "todo", "priority": "medium", "due_in_days": 10}
+  ]
+}

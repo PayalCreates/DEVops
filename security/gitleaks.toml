@@ -1,0 +1,26 @@
+# gitleaks configuration: default ruleset + project-specific allowlist.
+title = "DevSecOps360 gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "devsecops360-jwt-secret-assignment"
+description = "Hardcoded JWT secret"
+regex = '''(?i)jwt[_-]?secret[_-]?key\s*[:=]\s*['"]?[A-Za-z0-9_\-]{24,}'''
+keywords = ["jwt_secret", "jwt-secret", "jwt_secret_key"]
+
+[allowlist]
+description = "Documented placeholders and test fixtures (not real secrets)"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''(^|/)tests/''',
+  '''(^|/)node_modules/''',
+  '''package-lock\.json$''',
+]
+regexes = [
+  '''change-me''',
+  '''dev-only-insecure-secret''',
+  '''generate-with-python''',
+  '''REPLACE_ME''',
+]

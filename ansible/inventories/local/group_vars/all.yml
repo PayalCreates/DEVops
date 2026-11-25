@@ -1,0 +1,26 @@
+# Pinned tool versions = reproducible workstations.
+project_root: "{{ playbook_dir }}/../.."
+project_name: devsecops360
+
+tool_versions:
+  kubectl: "v1.31.4"
+  kind: "v0.26.0"
+  helm: "v3.16.4"
+  terraform: "1.10.3"
+  k9s: "v0.32.7"
+
+bin_dir: /usr/local/bin
+
+# Compose deployment
+compose_project_dir: "{{ project_root }}"
+compose_health_url: "http://localhost:8080/health/ready"
+
+# Backups
+backup_dir: "{{ project_root }}/backups"
+backup_retention_days: 7
+backup_cron_hour: "*/6"
+
+# Kubernetes deployment
+k8s_overlay: development
+k8s_namespace: devsecops360-dev
+k8s_context: kind-devsecops360

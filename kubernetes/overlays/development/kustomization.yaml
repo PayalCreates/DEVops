@@ -1,0 +1,50 @@
+# DEVELOPMENT — runs on the local kind cluster (8 GB laptop friendly).
+# Images are built locally and loaded with `kind load docker-image`.
+#   kubectl apply -k kubernetes/overlays/development
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: devsecops360-dev
+
+labels:
+  - pairs: { devsecops360/environment: development }
+    includeSelectors: false
+
+resources:
+  - namespace.yaml
+  - ../../base
+  - ../../blue-green
+
+images:
+  - name: devsecops360-backend
+    newName: devsecops360-backend
+    newTag: local
+  - name: devsecops360-frontend
+    newName: devsecops360-frontend
+    newTag: local
+
+patches:
+  - target: { kind: ConfigMap, name: backend-config }
+    patch: |-
+      - op: replace
+        path: /data/SEED_SAMPLE_DATA
+        value: "true"
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: DEBUG
+  # Smaller quota for the laptop
+  - target: { kind: ResourceQuota, name: namespace-quota }
+    patch: |-
+      - op: replace
+        path: /spec/hard/limits.memory
+        value: 3Gi
+  - target: { kind: HorizontalPodAutoscaler }
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+  # Backups every 2 hours in dev so the DR demo has fresh dumps
+  - target: { kind: CronJob, name: db-backup }
+    patch: |-
+      - op: replace
+        path: /spec/schedule
+        value: "0 */2 * * *"

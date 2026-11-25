@@ -1,0 +1,6 @@
+# Replace @your-github-username with your GitHub handle.
+*                       @your-github-username
+/.github/               @your-github-username
+/security/              @your-github-username
+/kubernetes/            @your-github-username
+/terraform/             @your-github-username

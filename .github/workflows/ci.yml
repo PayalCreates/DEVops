@@ -1,0 +1,139 @@
+# ---------------------------------------------------------------------------
+# CI: runs on every pull request and push to main.
+# Fast feedback first (lint/unit), then integration (real Postgres),
+# then a full-stack E2E run on the Docker Compose deployment.
+# ---------------------------------------------------------------------------
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  backend:
+    name: Backend · lint, SAST, tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-password
+          POSTGRES_DB: ds360_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci" --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/backend/requirements*.txt
+      - name: Install dependencies
+        run: pip install -r apps/backend/requirements-dev.txt
+      - name: Ruff (lint + import order)
+        working-directory: apps/backend
+        run: ruff check . --output-format=github
+      - name: Bandit (Python SAST)
+        working-directory: apps/backend
+        run: bandit -r app -c pyproject.toml -ll
+      - name: Unit + integration tests against PostgreSQL
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://ci:ci-password@localhost:5432/ds360_test
+        run: |
+          pytest --cov=apps/backend/app --cov-report=xml --cov-report=term \
+                 --cov-fail-under=85 --junitxml=reports/backend-junit.xml
+      - name: Migration round-trip (upgrade → downgrade → upgrade)
+        working-directory: apps/backend
+        env:
+          DATABASE_URL: postgresql+psycopg://ci:ci-password@localhost:5432/ds360_test
+        run: alembic upgrade head && alembic downgrade base && alembic upgrade head
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-reports
+          path: |
+            reports/
+            coverage.xml
+
+  frontend:
+    name: Frontend · lint, typecheck, tests, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: apps/frontend/dist
+
+  e2e:
+    name: E2E · Docker Compose stack + smoke + Playwright
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create CI .env with throwaway secrets
+        run: |
+          cp .env.example .env
+          sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 16)|" .env
+          sed -i "s|^JWT_SECRET_KEY=.*|JWT_SECRET_KEY=$(openssl rand -hex 32)|" .env
+          sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=Ci-Admin-$(openssl rand -hex 4)|" .env
+          sed -i "s|^DEMO_USER_PASSWORD=.*|DEMO_USER_PASSWORD=Ci-Demo-$(openssl rand -hex 4)|" .env
+      - name: Build and start the stack
+        run: docker compose up -d --build --wait --wait-timeout 180
+      - name: Show container health
+        if: always()
+        run: docker compose ps
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Smoke tests
+        run: |
+          pip install httpx==0.28.1 pytest==9.2.0
+          SMOKE_BASE_URL=http://localhost:8080 pytest tests/smoke -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Playwright E2E
+        working-directory: tests/e2e
+        env:
+          E2E_BASE_URL: http://localhost:8080
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: tests/e2e/playwright-report
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color > compose-logs.txt; tail -200 compose-logs.txt

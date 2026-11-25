@@ -1,0 +1,59 @@
+# Database migrations run ONCE per release, before the new colour receives traffic.
+# Migrations must be backwards-compatible (expand → migrate → contract) so the
+# currently-live colour keeps working against the new schema during blue-green.
+#   - Argo CD runs it automatically as a PreSync hook.
+#   - deployment/scripts/blue-green-deploy.* deletes and re-creates it per release.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: db-migrate
+        devsecops360/db-client: "true"
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: backend
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: devsecops360-backend
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "alembic upgrade head && if [ \"$SEED_SAMPLE_DATA\" = true ]; then python -m app.seed --sample-data; else python -m app.seed; fi"]
+          envFrom:
+            - configMapRef: { name: backend-config }
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: backend-secrets, key: POSTGRES_PASSWORD } }
+            - name: DATABASE_URL
+              value: postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):5432/$(POSTGRES_DB)
+            - name: JWT_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: backend-secrets, key: JWT_SECRET_KEY } }
+            - name: ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: backend-secrets, key: ADMIN_PASSWORD } }
+            - name: DEMO_USER_PASSWORD
+              valueFrom: { secretKeyRef: { name: backend-secrets, key: DEMO_USER_PASSWORD, optional: true } }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }

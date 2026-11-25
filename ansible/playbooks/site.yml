@@ -1,0 +1,10 @@
+# Full run: prepare the workstation, deploy the app with Compose, schedule backups.
+#   ansible-playbook playbooks/site.yml -K -e @inventories/local/group_vars/vault.yml --ask-vault-pass
+- name: Provision workstation
+  ansible.builtin.import_playbook: provision-workstation.yml
+
+- name: Deploy application with Docker Compose
+  ansible.builtin.import_playbook: deploy-compose.yml
+
+- name: Configure backups
+  ansible.builtin.import_playbook: backup.yml

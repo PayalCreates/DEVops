@@ -1,0 +1,51 @@
+# Apply a Kustomize overlay to the cluster and wait for the rollout.
+#   ansible-playbook playbooks/deploy-k8s.yml -e k8s_overlay=development
+- name: Deploy DevSecOps360 to Kubernetes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    overlay_dir: "{{ project_root }}/kubernetes/overlays/{{ k8s_overlay }}"
+  tasks:
+    - name: Ensure the backend secret exists (created by Terraform or create-secrets script)
+      kubernetes.core.k8s_info:
+        context: "{{ k8s_context }}"
+        kind: Secret
+        namespace: "{{ k8s_namespace }}"
+        name: backend-secrets
+      register: secret_info
+      failed_when: secret_info.resources | length == 0
+
+    - name: Apply Kustomize overlay
+      kubernetes.core.k8s:
+        context: "{{ k8s_context }}"
+        state: present
+        apply: true
+        server_side_apply:
+          field_manager: ansible
+        definition: "{{ lookup('kubernetes.core.kustomize', dir=overlay_dir) }}"
+
+    - name: Wait for the database
+      kubernetes.core.k8s_info:
+        context: "{{ k8s_context }}"
+        kind: StatefulSet
+        namespace: "{{ k8s_namespace }}"
+        name: postgres
+        wait: true
+        wait_condition: { type: Ready, status: "True" }
+        wait_timeout: 300
+      register: pg
+      until: (pg.resources[0].status.readyReplicas | default(0)) >= 1
+      retries: 30
+      delay: 10
+
+    - name: Wait for the active backend and frontend
+      kubernetes.core.k8s_info:
+        context: "{{ k8s_context }}"
+        kind: Deployment
+        namespace: "{{ k8s_namespace }}"
+        name: "{{ item }}"
+        wait: true
+        wait_condition: { type: Available, status: "True" }
+        wait_timeout: 300
+      loop: [backend-blue, frontend]

@@ -1,0 +1,10 @@
+# Installs and verifies the DevOps toolchain inside WSL2 Ubuntu (idempotent:
+# a second run reports changed=0).
+#   ansible-playbook playbooks/provision-workstation.yml -K
+- name: Provision DevSecOps360 workstation
+  hosts: workstation
+  become: true
+  roles:
+    - role: common
+    - role: docker
+    - role: k8s_tools

@@ -1,0 +1,69 @@
+# Alert rules. Every alert links to a runbook in docs/runbooks/.
+groups:
+  - name: devsecops360-slo-burn
+    rules:
+      # Google SRE workbook multi-window, multi-burn-rate alerts for a 99.5% SLO
+      # (budget = 0.5%). 14.4x burn over 1h consumes 2% of a 30-day budget.
+      - alert: ErrorBudgetFastBurn
+        expr: sli:error_ratio:rate1h > (14.4 * 0.005) and sli:error_ratio:rate5m > (14.4 * 0.005)
+        for: 2m
+        labels: { severity: critical, team: platform }
+        annotations:
+          summary: "Error budget burning fast ({{ $value | humanizePercentage }} errors)"
+          description: "At this rate the 30-day error budget is gone in ~2 days."
+          runbook_url: "docs/runbooks/high-error-rate.md"
+      - alert: ErrorBudgetSlowBurn
+        expr: sli:error_ratio:rate6h > (6 * 0.005) and sli:error_ratio:rate30m > (6 * 0.005)
+        for: 15m
+        labels: { severity: warning, team: platform }
+        annotations:
+          summary: "Error budget burning steadily"
+          runbook_url: "docs/runbooks/high-error-rate.md"
+
+  - name: devsecops360-symptoms
+    rules:
+      - alert: BackendDown
+        expr: up{job="backend"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Backend target {{ $labels.instance }} is down"
+          runbook_url: "docs/runbooks/service-down.md"
+      - alert: HighLatencyP95
+        expr: sli:latency_p95:5m > 0.3
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "p95 latency {{ $value | humanizeDuration }} exceeds 300 ms SLO"
+          runbook_url: "docs/runbooks/high-latency.md"
+      - alert: HighErrorRate
+        expr: sli:error_ratio:rate5m > 0.05 and sli:http_requests:rate5m > 0.1
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "More than 5% of requests are failing"
+          runbook_url: "docs/runbooks/high-error-rate.md"
+      - alert: LoginBruteForceSuspected
+        expr: sum(rate(auth_login_attempts_total{result=~"failure|rate_limited"}[5m])) > 1
+        for: 5m
+        labels: { severity: warning, team: security }
+        annotations:
+          summary: "Sustained failed logins ({{ $value }}/s) — possible credential stuffing"
+          runbook_url: "docs/runbooks/security-incident.md"
+
+  - name: devsecops360-database
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "PostgreSQL is unreachable"
+          runbook_url: "docs/runbooks/database-outage.md"
+      - alert: PostgresTooManyConnections
+        expr: sum(pg_stat_database_numbackends) > 80
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "PostgreSQL connections high ({{ $value }})"
+          runbook_url: "docs/runbooks/database-outage.md"

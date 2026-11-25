@@ -1,0 +1,12 @@
+# Blue-Green backend: two identical Deployments (blue, green) + an active Service
+# and a preview Service. See docs/deployment/blue-green.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: devsecops360
+    includeSelectors: false
+resources:
+  - blue
+  - green
+  - services.yaml

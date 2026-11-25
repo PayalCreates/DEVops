@@ -1,0 +1,25 @@
+# Guardrails so one runaway pod cannot starve an 8 GB laptop / shared cluster.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+spec:
+  limits:
+    - type: Container
+      default: { cpu: 500m, memory: 256Mi }
+      defaultRequest: { cpu: 50m, memory: 64Mi }
+      max: { cpu: "1", memory: 1Gi }
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: namespace-quota
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    limits.cpu: "6"
+    limits.memory: 4Gi
+    pods: "25"
+    persistentvolumeclaims: "4"
+    requests.storage: 10Gi

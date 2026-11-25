@@ -1,0 +1,26 @@
+# Automated dependency updates — supply-chain hygiene.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /apps/backend
+    schedule: { interval: weekly }
+    groups:
+      python-deps: { patterns: ["*"] }
+  - package-ecosystem: npm
+    directory: /apps/frontend
+    schedule: { interval: weekly }
+    groups:
+      frontend-dev: { dependency-type: development }
+      frontend-prod: { dependency-type: production }
+  - package-ecosystem: npm
+    directory: /tests/e2e
+    schedule: { interval: monthly }
+  - package-ecosystem: docker
+    directory: /docker
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: terraform
+    directory: /terraform/environments/local
+    schedule: { interval: monthly }

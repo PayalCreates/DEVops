@@ -1,0 +1,11 @@
+# terraform init -backend-config=backend.hcl
+# S3-compatible remote state with locking. For a 100% local lab, run MinIO and
+# point `endpoints.s3` at it.
+bucket                      = "devsecops360-tfstate"
+key                         = "staging/terraform.tfstate"
+region                      = "us-east-1"
+use_lockfile                = true # S3-native state locking (Terraform >= 1.10)
+encrypt                     = true
+# endpoints = { s3 = "http://localhost:9000" }   # MinIO
+# use_path_style = true
+# skip_credentials_validation = true

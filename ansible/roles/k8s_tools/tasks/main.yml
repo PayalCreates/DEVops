@@ -1,0 +1,74 @@
+# Install pinned CLI versions. Each tool is only downloaded when the installed
+# version differs from the pinned one -> idempotent.
+- name: Read installed tool versions
+  ansible.builtin.shell: # noqa: command-instead-of-shell  (commands use pipes)
+    cmd: "{{ item.value }}"
+  loop: "{{ k8s_tools_version_commands | dict2items }}"
+  register: k8s_tools_installed
+  changed_when: false
+  failed_when: false
+
+- name: Build a map of installed versions
+  ansible.builtin.set_fact:
+    k8s_tools_installed_versions: "{{ k8s_tools_installed_versions | default({}) | combine({item.item.key: item.stdout | trim}) }}"
+  loop: "{{ k8s_tools_installed.results }}"
+  loop_control: { label: "{{ item.item.key }}" }
+
+- name: Install kubectl {{ tool_versions.kubectl }}
+  ansible.builtin.get_url:
+    url: "https://dl.k8s.io/release/{{ tool_versions.kubectl }}/bin/linux/amd64/kubectl"
+    checksum: "sha256:https://dl.k8s.io/release/{{ tool_versions.kubectl }}/bin/linux/amd64/kubectl.sha256"
+    dest: "{{ bin_dir }}/kubectl"
+    mode: "0755"
+    force: true
+  when: tool_versions.kubectl not in k8s_tools_installed_versions.kubectl
+
+- name: Install kind {{ tool_versions.kind }}
+  ansible.builtin.get_url:
+    url: "https://kind.sigs.k8s.io/dl/{{ tool_versions.kind }}/kind-linux-amd64"
+    checksum: "sha256:https://kind.sigs.k8s.io/dl/{{ tool_versions.kind }}/kind-linux-amd64.sha256sum"
+    dest: "{{ bin_dir }}/kind"
+    mode: "0755"
+    force: true
+  when: tool_versions.kind not in k8s_tools_installed_versions.kind
+
+- name: Install helm {{ tool_versions.helm }}
+  when: tool_versions.helm not in k8s_tools_installed_versions.helm
+  block:
+    - name: Download helm
+      ansible.builtin.get_url:
+        url: "https://get.helm.sh/helm-{{ tool_versions.helm }}-linux-amd64.tar.gz"
+        checksum: "sha256:https://get.helm.sh/helm-{{ tool_versions.helm }}-linux-amd64.tar.gz.sha256sum"
+        dest: /tmp/helm.tar.gz
+        mode: "0644"
+    - name: Extract helm
+      ansible.builtin.unarchive:
+        src: /tmp/helm.tar.gz
+        dest: /tmp
+        remote_src: true
+    - name: Install helm binary
+      ansible.builtin.copy:
+        src: /tmp/linux-amd64/helm
+        dest: "{{ bin_dir }}/helm"
+        mode: "0755"
+        remote_src: true
+
+- name: Install terraform {{ tool_versions.terraform }}
+  when: tool_versions.terraform not in k8s_tools_installed_versions.terraform
+  block:
+    - name: Download terraform
+      ansible.builtin.get_url:
+        url: "https://releases.hashicorp.com/terraform/{{ tool_versions.terraform }}/terraform_{{ tool_versions.terraform }}_linux_amd64.zip"
+        checksum: "sha256:https://releases.hashicorp.com/terraform/{{ tool_versions.terraform }}/terraform_{{ tool_versions.terraform }}_SHA256SUMS"
+        dest: /tmp/terraform.zip
+        mode: "0644"
+    - name: Install terraform binary
+      ansible.builtin.unarchive:
+        src: /tmp/terraform.zip
+        dest: "{{ bin_dir }}"
+        remote_src: true
+        mode: "0755"
+
+- name: Report toolchain
+  ansible.builtin.debug:
+    msg: "{{ k8s_tools_installed_versions }}"

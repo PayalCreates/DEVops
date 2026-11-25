@@ -1,0 +1,368 @@
+devsecops360/
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml
+│   │   ├── codeql.yml
+│   │   ├── delivery.yml
+│   │   ├── iac.yml
+│   │   └── security.yml
+│   ├── CODEOWNERS
+│   ├── dependabot.yml
+│   └── pull_request_template.md
+├── .vscode/
+│   └── extensions.json
+├── ansible/
+│   ├── inventories/
+│   │   └── local/
+│   │       ├── group_vars/
+│   │       │   ├── all.yml
+│   │       │   └── vault.yml.example
+│   │       └── hosts.yml
+│   ├── playbooks/
+│   │   ├── backup.yml
+│   │   ├── deploy-compose.yml
+│   │   ├── deploy-k8s.yml
+│   │   ├── provision-workstation.yml
+│   │   └── site.yml
+│   ├── roles/
+│   │   ├── app_deploy/
+│   │   │   ├── defaults/
+│   │   │   │   └── main.yml
+│   │   │   ├── tasks/
+│   │   │   │   └── main.yml
+│   │   │   └── templates/
+│   │   │       └── env.j2
+│   │   ├── backup/
+│   │   │   └── tasks/
+│   │   │       └── main.yml
+│   │   ├── common/
+│   │   │   ├── defaults/
+│   │   │   │   └── main.yml
+│   │   │   └── tasks/
+│   │   │       └── main.yml
+│   │   ├── docker/
+│   │   │   ├── defaults/
+│   │   │   │   └── main.yml
+│   │   │   └── tasks/
+│   │   │       └── main.yml
+│   │   └── k8s_tools/
+│   │       ├── defaults/
+│   │       │   └── main.yml
+│   │       └── tasks/
+│   │           └── main.yml
+│   ├── ansible.cfg
+│   └── requirements.yml
+├── apps/
+│   ├── backend/
+│   │   ├── app/
+│   │   │   ├── api/
+│   │   │   │   ├── routes/
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── analytics.py
+│   │   │   │   │   ├── auth.py
+│   │   │   │   │   ├── health.py
+│   │   │   │   │   ├── tasks.py
+│   │   │   │   │   └── users.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── deps.py
+│   │   │   ├── core/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── config.py
+│   │   │   │   ├── logging.py
+│   │   │   │   ├── metrics.py
+│   │   │   │   ├── middleware.py
+│   │   │   │   ├── ratelimit.py
+│   │   │   │   └── security.py
+│   │   │   ├── db/
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── session.py
+│   │   │   ├── __init__.py
+│   │   │   ├── main.py
+│   │   │   ├── models.py
+│   │   │   ├── sample_data.json
+│   │   │   ├── schemas.py
+│   │   │   └── seed.py
+│   │   ├── migrations/
+│   │   │   ├── versions/
+│   │   │   │   └── 0001_initial_schema.py
+│   │   │   ├── env.py
+│   │   │   └── script.py.mako
+│   │   ├── scripts/
+│   │   │   └── entrypoint.sh
+│   │   ├── .dockerignore
+│   │   ├── .env.example
+│   │   ├── alembic.ini
+│   │   ├── pyproject.toml
+│   │   ├── requirements-dev.txt
+│   │   └── requirements.txt
+│   └── frontend/
+│       ├── public/
+│       │   └── favicon.svg
+│       ├── src/
+│       │   ├── api/
+│       │   │   └── client.ts
+│       │   ├── auth/
+│       │   │   └── AuthContext.tsx
+│       │   ├── components/
+│       │   │   ├── Charts.tsx
+│       │   │   ├── Layout.tsx
+│       │   │   └── TaskForm.tsx
+│       │   ├── lib/
+│       │   │   └── validation.ts
+│       │   ├── pages/
+│       │   │   ├── AuthPage.tsx
+│       │   │   ├── DashboardPage.tsx
+│       │   │   ├── TasksPage.tsx
+│       │   │   └── UsersPage.tsx
+│       │   ├── test/
+│       │   │   ├── client.test.ts
+│       │   │   ├── components.test.tsx
+│       │   │   ├── pages.test.tsx
+│       │   │   └── setup.ts
+│       │   ├── App.tsx
+│       │   ├── main.tsx
+│       │   ├── styles.css
+│       │   └── types.ts
+│       ├── .dockerignore
+│       ├── eslint.config.js
+│       ├── index.html
+│       ├── nginx.conf
+│       ├── package.json
+│       ├── tsconfig.json
+│       └── vite.config.ts
+├── database/
+│   ├── init/
+│   │   └── 01-extensions.sql
+│   ├── README.md
+│   └── schema.md
+├── deployment/
+│   ├── gitops/
+│   │   └── argocd-applications.yaml
+│   ├── rollback/
+│   │   ├── rollback.ps1
+│   │   └── rollback.sh
+│   └── scripts/
+│       ├── blue-green-deploy.ps1
+│       ├── blue-green-deploy.sh
+│       ├── create-secrets.ps1
+│       ├── create-secrets.sh
+│       ├── deploy-k8s.ps1
+│       ├── deploy-k8s.sh
+│       ├── lib.ps1
+│       ├── lib.sh
+│       ├── smoke_check.py
+│       └── status.sh
+├── docker/
+│   ├── backend.Dockerfile
+│   └── frontend.Dockerfile
+├── docs/
+│   ├── adr/
+│   │   ├── 0001-record-architecture-decisions.md
+│   │   ├── 0002-fastapi-react-postgres.md
+│   │   ├── 0003-jwt-auth-rbac.md
+│   │   ├── 0004-kind-and-traefik.md
+│   │   ├── 0005-blue-green-via-service-selector.md
+│   │   ├── 0006-kustomize-overlays.md
+│   │   ├── 0007-secrets-management.md
+│   │   ├── 0008-observability-stack.md
+│   │   ├── 0009-supply-chain-security.md
+│   │   ├── 0010-migrations-as-job.md
+│   │   ├── 0011-resource-constrained-design.md
+│   │   └── README.md
+│   ├── architecture/
+│   │   └── architecture.md
+│   ├── deployment/
+│   │   ├── blue-green.md
+│   │   └── deployment-guide.md
+│   ├── evidence/
+│   │   └── README.md
+│   ├── guides/
+│   │   ├── installation.md
+│   │   ├── local-setup.md
+│   │   └── troubleshooting.md
+│   ├── project/
+│   │   └── milestones.md
+│   ├── report/
+│   │   ├── academic-report.md
+│   │   ├── demo-scripts.md
+│   │   ├── evaluation-mapping.md
+│   │   ├── presentation-outline.md
+│   │   └── viva-questions.md
+│   ├── runbooks/
+│   │   ├── README.md
+│   │   ├── backup-and-restore.md
+│   │   ├── chaos-experiments.md
+│   │   ├── database-outage.md
+│   │   ├── deployment-rollback.md
+│   │   ├── high-error-rate.md
+│   │   ├── high-latency.md
+│   │   ├── incident-response.md
+│   │   ├── security-incident.md
+│   │   └── service-down.md
+│   ├── security/
+│   │   ├── security-guide.md
+│   │   └── threat-model.md
+│   ├── sre/
+│   │   └── slos.md
+│   └── testing/
+│       ├── performance-report.md
+│       ├── test-results.md
+│       └── testing-guide.md
+├── kubernetes/
+│   ├── base/
+│   │   ├── backup-cronjob.yaml
+│   │   ├── configmap.yaml
+│   │   ├── frontend.yaml
+│   │   ├── ingress.yaml
+│   │   ├── kustomization.yaml
+│   │   ├── limits.yaml
+│   │   ├── migrate-job.yaml
+│   │   ├── networkpolicy.yaml
+│   │   ├── postgres.yaml
+│   │   ├── rbac.yaml
+│   │   └── serviceaccounts.yaml
+│   ├── blue-green/
+│   │   ├── app/
+│   │   │   ├── deployment.yaml
+│   │   │   ├── hpa.yaml
+│   │   │   ├── kustomization.yaml
+│   │   │   └── pdb.yaml
+│   │   ├── blue/
+│   │   │   └── kustomization.yaml
+│   │   ├── green/
+│   │   │   └── kustomization.yaml
+│   │   ├── kustomization.yaml
+│   │   └── services.yaml
+│   └── overlays/
+│       ├── development/
+│       │   ├── kustomization.yaml
+│       │   └── namespace.yaml
+│       ├── production/
+│       │   ├── kustomization.yaml
+│       │   └── namespace.yaml
+│       └── staging/
+│           ├── kustomization.yaml
+│           └── namespace.yaml
+├── load-testing/
+│   ├── README.md
+│   ├── locustfile.py
+│   └── run.sh
+├── observability/
+│   ├── alertmanager/
+│   │   └── alertmanager.yml
+│   ├── grafana/
+│   │   ├── dashboards/
+│   │   │   └── devsecops360-overview.json
+│   │   └── provisioning/
+│   │       ├── dashboards/
+│   │       │   └── dashboards.yml
+│   │       └── datasources/
+│   │           └── datasources.yml
+│   ├── kubernetes/
+│   │   ├── app-monitoring/
+│   │   │   ├── devsecops360-overview.json
+│   │   │   ├── kustomization.yaml
+│   │   │   ├── podmonitor.yaml
+│   │   │   └── prometheusrule.yaml
+│   │   ├── alloy.values.yaml
+│   │   ├── kube-prometheus-stack.values.yaml
+│   │   └── loki.values.yaml
+│   ├── loki/
+│   │   ├── config.alloy
+│   │   └── loki.yml
+│   └── prometheus/
+│       ├── rules/
+│       │   ├── alerts.yml
+│       │   └── slo-recording.yml
+│       └── prometheus.yml
+├── scripts/
+│   ├── backup/
+│   │   ├── backup.ps1
+│   │   ├── backup.sh
+│   │   ├── restore.ps1
+│   │   ├── restore.sh
+│   │   └── verify-restore.sh
+│   ├── chaos/
+│   │   ├── README.md
+│   │   ├── compose-chaos.sh
+│   │   ├── cpu-stress-hpa.sh
+│   │   ├── db-outage.sh
+│   │   └── kill-pod.sh
+│   ├── validate/
+│   │   ├── k8s_policy_check.py
+│   │   ├── render_kustomize.py
+│   │   └── terraform_static_check.py
+│   ├── dev.ps1
+│   ├── generate_observability.py
+│   ├── init-env.sh
+│   ├── security-scan.ps1
+│   └── security-scan.sh
+├── security/
+│   ├── .trivyignore.yaml
+│   ├── gitleaks.toml
+│   ├── semgrep-rules.yml
+│   └── trivy.yaml
+├── terraform/
+│   ├── environments/
+│   │   ├── local/
+│   │   │   ├── main.tf
+│   │   │   ├── outputs.tf
+│   │   │   ├── terraform.tfvars.example
+│   │   │   └── variables.tf
+│   │   ├── production/
+│   │   │   ├── backend.hcl.example
+│   │   │   └── main.tf
+│   │   └── staging/
+│   │       ├── backend.hcl.example
+│   │       └── main.tf
+│   └── modules/
+│       ├── app-namespace/
+│       │   ├── main.tf
+│       │   ├── outputs.tf
+│       │   ├── variables.tf
+│       │   └── versions.tf
+│       ├── kind-cluster/
+│       │   ├── main.tf
+│       │   ├── outputs.tf
+│       │   ├── variables.tf
+│       │   └── versions.tf
+│       └── platform-addons/
+│           ├── main.tf
+│           ├── outputs.tf
+│           ├── variables.tf
+│           └── versions.tf
+├── tests/
+│   ├── deployment/
+│   │   ├── fake_kubectl.py
+│   │   ├── test_blue_green_scripts.py
+│   │   └── test_manifests.py
+│   ├── e2e/
+│   │   ├── specs/
+│   │   │   └── task-journey.spec.ts
+│   │   ├── package.json
+│   │   ├── playwright.config.ts
+│   │   └── tsconfig.json
+│   ├── integration/
+│   │   ├── test_auth_api.py
+│   │   ├── test_platform.py
+│   │   └── test_tasks_api.py
+│   ├── smoke/
+│   │   └── test_smoke.py
+│   ├── unit/
+│   │   ├── test_schemas_and_config.py
+│   │   └── test_security.py
+│   └── conftest.py
+├── .editorconfig
+├── .env.example
+├── .gitattributes
+├── .gitignore
+├── .pre-commit-config.yaml
+├── .yamllint.yml
+├── LICENSE
+├── Makefile
+├── README.md
+├── SECURITY.md
+├── docker-compose.yml
+└── pytest.ini
+
+(+ docs/evidence/screenshots/*.png, docs/evidence/load-tests/*, package-lock.json files)

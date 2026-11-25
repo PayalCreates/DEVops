@@ -1,0 +1,11 @@
+# Risk-accepted Trivy findings. Every entry needs a statement (why), and is
+# reviewed when it expires. Keep this list short; prefer fixing over ignoring.
+misconfigurations:
+  - id: AVD-DS-0026
+    paths:
+      - "docker/frontend.Dockerfile"
+      - "docker/backend.Dockerfile"
+    statement: >-
+      HEALTHCHECK is defined in both Dockerfiles; this entry only covers Trivy
+      versions that fail to detect multi-line HEALTHCHECK instructions.
+    expired_at: 2027-06-01

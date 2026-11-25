@@ -1,0 +1,142 @@
+# Automated backups + automated restore verification (a backup you have never
+# restored is only a hope). See docs/runbooks/backup-and-restore.md for RPO/RTO.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-backups
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests: { storage: 2Gi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup
+spec:
+  schedule: "0 */6 * * *" # every 6 hours  → RPO ≤ 6h
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: db-backup
+            devsecops360/db-client: "true"
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            fsGroup: 70
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              imagePullPolicy: IfNotPresent
+              command:
+                - sh
+                - -ec
+                - |
+                  ts=$(date -u +%Y%m%dT%H%M%SZ)
+                  file=/backups/devsecops360-$ts.dump
+                  pg_dump -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+                          --format=custom --compress=6 --no-owner --file="$file.partial"
+                  # validate the archive is readable before publishing it
+                  pg_restore --list "$file.partial" > /dev/null
+                  mv "$file.partial" "$file"
+                  sha256sum "$file" > "$file.sha256"
+                  echo "{\"msg\":\"backup_ok\",\"file\":\"$file\",\"bytes\":$(stat -c %s "$file")}"
+                  # retention: keep the newest 14 backups (3.5 days at 6h cadence)
+                  ls -1t /backups/*.dump | tail -n +15 | while read -r old; do rm -f "$old" "$old.sha256"; done
+              envFrom:
+                - configMapRef: { name: backend-config }
+              env:
+                - name: PGPASSWORD
+                  valueFrom: { secretKeyRef: { name: backend-secrets, key: POSTGRES_PASSWORD } }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { cpu: 500m, memory: 256Mi }
+              volumeMounts:
+                - { name: backups, mountPath: /backups }
+                - { name: tmp, mountPath: /tmp }
+          volumes:
+            - name: backups
+              persistentVolumeClaim: { claimName: db-backups }
+            - { name: tmp, emptyDir: {} }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-restore-verify
+spec:
+  schedule: "30 3 * * *" # daily: restore latest backup into a scratch DB and check it
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: db-restore-verify
+            devsecops360/db-client: "true"
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            fsGroup: 70
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: verify
+              image: postgres:16-alpine
+              imagePullPolicy: IfNotPresent
+              command:
+                - sh
+                - -ec
+                - |
+                  latest=$(ls -1t /backups/*.dump | head -n1)
+                  [ -n "$latest" ] || { echo '{"msg":"no_backup_found"}'; exit 1; }
+                  sha256sum -c "$latest.sha256"
+                  scratch=restore_verify_$(date +%s)
+                  start=$(date +%s)
+                  psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d postgres -c "CREATE DATABASE $scratch"
+                  trap 'psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE IF EXISTS $scratch"' EXIT
+                  pg_restore -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$scratch" --no-owner "$latest"
+                  users=$(psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$scratch" -tAc "SELECT count(*) FROM users")
+                  tasks=$(psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$scratch" -tAc "SELECT count(*) FROM tasks")
+                  rev=$(psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$scratch" -tAc "SELECT version_num FROM alembic_version")
+                  [ "$users" -ge 1 ] || { echo '{"msg":"restore_verify_failed","reason":"no users"}'; exit 1; }
+                  echo "{\"msg\":\"restore_verify_ok\",\"backup\":\"$latest\",\"users\":$users,\"tasks\":$tasks,\"alembic\":\"$rev\",\"restore_seconds\":$(( $(date +%s) - start ))}"
+              envFrom:
+                - configMapRef: { name: backend-config }
+              env:
+                - name: PGPASSWORD
+                  valueFrom: { secretKeyRef: { name: backend-secrets, key: POSTGRES_PASSWORD } }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { cpu: 500m, memory: 256Mi }
+              volumeMounts:
+                - { name: backups, mountPath: /backups, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+          volumes:
+            - name: backups
+              persistentVolumeClaim: { claimName: db-backups }
+            - { name: tmp, emptyDir: {} }

@@ -1,0 +1,30 @@
+# Base: everything shared by all environments EXCEPT the backend, which lives in
+# ../blue-green so two colours can run side by side.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: devsecops360
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+
+resources:
+  - serviceaccounts.yaml
+  - rbac.yaml
+  - limits.yaml
+  - configmap.yaml
+  - postgres.yaml
+  - frontend.yaml
+  - ingress.yaml
+  - networkpolicy.yaml
+  - migrate-job.yaml
+  - backup-cronjob.yaml
+
+images:
+  - name: devsecops360-backend
+    newName: devsecops360-backend
+    newTag: local
+  - name: devsecops360-frontend
+    newName: devsecops360-frontend
+    newTag: local

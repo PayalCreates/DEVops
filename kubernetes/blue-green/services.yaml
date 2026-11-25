@@ -1,0 +1,30 @@
+# TRAFFIC SWITCH: the `backend` Service selects ONE colour. Switching colour is a
+# single atomic selector patch (instant cut-over; instant rollback by patching back):
+#   kubectl -n <ns> patch svc backend -p '{"spec":{"selector":{"devsecops360/color":"green"}}}'
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels: { app.kubernetes.io/name: backend }
+  annotations:
+    devsecops360/active-color: blue
+spec:
+  selector:
+    app.kubernetes.io/name: backend
+    devsecops360/color: blue
+  ports:
+    - { name: http, port: 8000, targetPort: http }
+---
+# PREVIEW: always points at the IDLE colour, so a new release can be smoke-tested
+# in-cluster before it receives a single real user request.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-preview
+  labels: { app.kubernetes.io/name: backend, devsecops360/role: preview }
+spec:
+  selector:
+    app.kubernetes.io/name: backend
+    devsecops360/color: green
+  ports:
+    - { name: http, port: 8000, targetPort: http }

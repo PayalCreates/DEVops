@@ -1,0 +1,122 @@
+# ---------------------------------------------------------------------------
+# DevSecOps scanning: secrets, dependencies (SCA), SAST, IaC misconfiguration.
+# Results are uploaded as SARIF to GitHub Security → Code scanning.
+# Runs on PRs, on main, and nightly (new CVEs appear without code changes).
+# ---------------------------------------------------------------------------
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "30 20 * * *" # 02:00 IST nightly
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.58.1
+  GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.21.2
+  SEMGREP_IMAGE: semgrep/semgrep:1.99.0
+
+jobs:
+  secrets:
+    name: Secret detection (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # scan full history, not just the last commit
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" "$GITLEAKS_IMAGE" \
+            detect --source /repo --config /repo/security/gitleaks.toml \
+            --redact --report-format sarif --report-path /repo/gitleaks.sarif --exit-code 1
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+
+  dependencies:
+    name: Dependency scanning (pip-audit, npm audit, Trivy fs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pip-audit (Python CVEs)
+        run: |
+          pip install pip-audit==2.10.1
+          pip-audit -r apps/backend/requirements.txt --strict
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: npm audit (production deps, high+)
+        working-directory: apps/frontend
+        run: npm audit --omit=dev --audit-level=high
+      - name: Trivy filesystem scan (vulns + secrets + licenses)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs \
+            --config security/trivy.yaml --format sarif --output trivy-fs.sarif .
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs \
+            --config security/trivy.yaml --exit-code 1 .
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+  dependency-review:
+    name: Dependency review (PR only)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          deny-licenses: GPL-3.0, AGPL-3.0
+          comment-summary-in-pr: on-failure
+
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" semgrep scan \
+            --config p/python --config p/fastapi --config p/typescript --config p/react \
+            --config p/secrets --config p/dockerfile --config security/semgrep-rules.yml \
+            --sarif --output semgrep.sarif --error --severity ERROR
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  iac:
+    name: IaC misconfiguration (Trivy config)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan Dockerfiles, Kubernetes, Terraform, Compose
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" config \
+            --severity HIGH,CRITICAL --ignorefile security/.trivyignore.yaml \
+            --format sarif --output trivy-iac.sarif .
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" config \
+            --severity HIGH,CRITICAL --ignorefile security/.trivyignore.yaml --exit-code 1 .
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-iac.sarif
+          category: trivy-iac

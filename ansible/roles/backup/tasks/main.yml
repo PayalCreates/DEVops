@@ -1,0 +1,37 @@
+- name: Ensure backup directory exists
+  ansible.builtin.file:
+    path: "{{ backup_dir }}"
+    state: directory
+    mode: "0750"
+
+- name: Schedule PostgreSQL backups
+  ansible.builtin.cron:
+    name: "devsecops360 postgres backup"
+    minute: "0"
+    hour: "{{ backup_cron_hour }}"
+    job: >-
+      cd {{ compose_project_dir }} &&
+      RETENTION_DAYS={{ backup_retention_days }} bash scripts/backup/backup.sh
+      >> {{ backup_dir }}/backup.log 2>&1
+    state: present
+
+- name: Schedule daily restore verification
+  ansible.builtin.cron:
+    name: "devsecops360 restore verification"
+    minute: "30"
+    hour: "3"
+    job: "cd {{ compose_project_dir }} && bash scripts/backup/verify-restore.sh >> {{ backup_dir }}/verify.log 2>&1"
+    state: present
+
+- name: Run a backup now
+  ansible.builtin.command: bash scripts/backup/backup.sh
+  args:
+    chdir: "{{ compose_project_dir }}"
+  environment:
+    RETENTION_DAYS: "{{ backup_retention_days }}"
+  register: backup_run
+  changed_when: "'backup_ok' in backup_run.stdout"
+
+- name: Backup result
+  ansible.builtin.debug:
+    var: backup_run.stdout_lines

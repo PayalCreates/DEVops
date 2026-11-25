@@ -1,0 +1,122 @@
+# Zero-trust networking: deny everything, then allow only the required flows.
+#
+#   traefik ns ──▶ frontend:8080 ──▶ backend:8000 ──▶ postgres:5432
+#   monitoring ns ──▶ backend:8000 (metrics scrape)
+#   db-migrate / backup jobs ──▶ postgres:5432
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: frontend }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: traefik }
+        - podSelector:
+            matchLabels: { devsecops360/role: smoke-test }
+      ports: [{ protocol: TCP, port: 8080 }]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: backend }
+      ports: [{ protocol: TCP, port: 8000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: backend }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: frontend }
+        - podSelector:
+            matchLabels: { devsecops360/role: smoke-test }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: monitoring }
+      ports: [{ protocol: TCP, port: 8000 }]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: postgres }
+      ports: [{ protocol: TCP, port: 5432 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: postgres }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: backend }
+        - podSelector:
+            matchLabels: { devsecops360/db-client: "true" }
+      ports: [{ protocol: TCP, port: 5432 }]
+  egress: [] # the database initiates no connections
+---
+# Jobs that talk to the database (migrations, backups, restore verification)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-clients
+spec:
+  podSelector:
+    matchLabels: { devsecops360/db-client: "true" }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: postgres }
+      ports: [{ protocol: TCP, port: 5432 }]
+---
+# Smoke-test pods launched by the blue-green script
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: smoke-tests
+spec:
+  podSelector:
+    matchLabels: { devsecops360/role: smoke-test }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: backend }
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: frontend }
+      ports:
+        - { protocol: TCP, port: 8000 }
+        - { protocol: TCP, port: 8080 }

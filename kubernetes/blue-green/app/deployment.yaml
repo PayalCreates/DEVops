@@ -1,0 +1,86 @@
+# Backend Deployment TEMPLATE. Instantiated twice (blue/, green/) via nameSuffix
+# and a `devsecops360/color` label that is also added to the selector.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels: { app.kubernetes.io/name: backend, app.kubernetes.io/component: api }
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 180
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels: { app.kubernetes.io/name: backend }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: backend, app.kubernetes.io/component: api }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: backend
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app.kubernetes.io/name: backend }
+      containers:
+        - name: backend
+          image: devsecops360-backend
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8000 }
+          envFrom:
+            - configMapRef: { name: backend-config }
+          env:
+            - name: APP_COLOR
+              value: blue # patched per colour
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: backend-secrets, key: POSTGRES_PASSWORD } }
+            - name: DATABASE_URL
+              value: postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):5432/$(POSTGRES_DB)
+            - name: JWT_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: backend-secrets, key: JWT_SECRET_KEY } }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          # Self-healing: startup → liveness restarts hung processes; readiness
+          # removes the pod from the Service when the DB is unreachable.
+          startupProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 3
+            failureThreshold: 20
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              # give endpoints time to drop this pod before SIGTERM (zero-downtime)
+              exec: { command: ["sleep", "5"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }

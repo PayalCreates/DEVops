@@ -1,0 +1,40 @@
+- name: Require Vault-provided secrets
+  ansible.builtin.assert:
+    that:
+      - vault_postgres_password is defined
+      - vault_jwt_secret_key is defined and vault_jwt_secret_key | length >= 32
+      - vault_admin_password is defined
+    fail_msg: "Pass secrets with -e @inventories/local/group_vars/vault.yml --ask-vault-pass"
+  no_log: true
+
+- name: Render .env from template (mode 0600, never logged)
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ compose_project_dir }}/.env"
+    mode: "0600"
+  no_log: true
+  register: app_deploy_env_file
+
+- name: Build images and start the stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ compose_project_dir }}"
+    build: "{{ 'always' if app_deploy_rebuild | bool else 'policy' }}"
+    state: present
+    wait: true
+    wait_timeout: 240
+    recreate: "{{ 'always' if app_deploy_env_file.changed else 'auto' }}"
+  register: app_deploy_compose
+
+- name: Wait for the application to report ready
+  ansible.builtin.uri:
+    url: "{{ compose_health_url }}"
+    status_code: 200
+    return_content: true
+  register: app_deploy_health
+  until: app_deploy_health.status == 200 and (app_deploy_health.json.database | default('')) == 'ok'
+  retries: 20
+  delay: 5
+
+- name: Show deployed version
+  ansible.builtin.debug:
+    msg: "DevSecOps360 {{ app_deploy_health.json.version }} ({{ app_deploy_health.json.color }}) is healthy"

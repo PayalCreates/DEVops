@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+nameSuffix: -green
+labels:
+  - pairs:
+      devsecops360/color: green
+    includeSelectors: true
+    includeTemplates: true
+resources:
+  - ../app
+patches:
+  - target: { kind: Deployment }
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/value
+        value: green
+  # The idle colour starts scaled to zero; the deploy script scales it up.
+  - target: { kind: Deployment }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0

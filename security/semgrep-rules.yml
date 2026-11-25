@@ -1,0 +1,51 @@
+# Project-specific Semgrep rules that encode our own security decisions.
+rules:
+  - id: jwt-decode-without-verification
+    languages: [python]
+    severity: ERROR
+    message: JWT decoded without signature verification
+    pattern-either:
+      - pattern: 'jwt.decode(..., options={..., "verify_signature": False, ...}, ...)'
+      - pattern: 'jwt.decode(..., algorithms=["none"], ...)'
+
+  - id: raw-sql-string-formatting
+    languages: [python]
+    severity: ERROR
+    message: Possible SQL injection — use SQLAlchemy bound parameters, not f-strings
+    pattern-either:
+      - pattern: text(f"...")
+      - pattern: $SESSION.execute(f"...")
+      - pattern: text("..." % ...)
+      - pattern: text("...".format(...))
+
+  - id: fastapi-route-missing-auth
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Route in tasks/users/analytics router without an auth dependency. Every
+      non-public route must depend on get_current_user or require_roles.
+    paths:
+      include: ["apps/backend/app/api/routes/tasks.py", "apps/backend/app/api/routes/users.py",
+                "apps/backend/app/api/routes/analytics.py"]
+    patterns:
+      - pattern: |
+          @router.$METHOD(...)
+          def $FN(...): ...
+      - pattern-not: |
+          @router.$METHOD(...)
+          def $FN(..., $U: $T = Depends(get_current_user), ...): ...
+      - pattern-not: |
+          @router.$METHOD(...)
+          def $FN(..., $U: $T = Depends(require_roles(...)), ...): ...
+
+  - id: react-dangerously-set-inner-html
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: dangerouslySetInnerHTML bypasses React's XSS protection
+    pattern: <$EL dangerouslySetInnerHTML={...} />
+
+  - id: token-in-localstorage
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: Do not persist auth tokens in localStorage (survives tab close, XSS-readable)
+    pattern: localStorage.setItem(...)

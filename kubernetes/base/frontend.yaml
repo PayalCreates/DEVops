@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels: { app.kubernetes.io/name: frontend }
+spec:
+  selector: { app.kubernetes.io/name: frontend }
+  ports:
+    - { name: http, port: 8080, targetPort: http }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels: { app.kubernetes.io/name: frontend, app.kubernetes.io/component: web }
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels: { app.kubernetes.io/name: frontend }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: frontend, app.kubernetes.io/component: web }
+    spec:
+      serviceAccountName: frontend
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: frontend
+          image: devsecops360-frontend
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8080 }
+          env:
+            - name: BACKEND_UPSTREAM
+              value: backend:8000 # the *active* colour, via the backend Service
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 64Mi }
+          readinessProbe:
+            httpGet: { path: /nginx-health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /nginx-health, port: http }
+            periodSeconds: 20
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: cache, mountPath: /var/cache/nginx }
+            - { name: confd, mountPath: /etc/nginx/conf.d }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+        - { name: cache, emptyDir: {} }
+        - { name: confd, emptyDir: {} }
