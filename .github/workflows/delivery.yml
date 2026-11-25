@@ -63,7 +63,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build (load locally for scanning first — nothing is pushed yet)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: apps/${{ matrix.component }}
           file: docker/${{ matrix.component }}.Dockerfile
@@ -100,7 +100,7 @@ jobs:
 
       - name: Push (same build, from cache)
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: apps/${{ matrix.component }}
           file: docker/${{ matrix.component }}.Dockerfile
